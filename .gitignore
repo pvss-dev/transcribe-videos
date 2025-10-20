@@ -1,0 +1,31 @@
+# ======================
+# VIRTUAL ENVIRONMENTS
+# ======================
+venv/
+.env/
+.venv/
+
+# ======================
+# PYTHON CACHE / COMPILED FILES
+# ======================
+__pycache__/
+*.py[cod]
+*$py.class
+
+# ======================
+# IDE / EDITOR SETTINGS
+# ======================
+.vscode/
+.idea/
+
+# ======================
+# ENVIRONMENT CONFIG FILES
+# ======================
+.env.local
+.env.development
+.env.production
+
+# ======================
+# TRANSCRIPTION FILE
+# ======================
+transcription.txt
