@@ -1,7 +1,13 @@
+import logging
 import sys
 
 from .config import TranscriptionConfig
 from .service import TranscriptionService
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(message)s'
+)
 
 
 def main():
@@ -21,7 +27,7 @@ def main():
         service = TranscriptionService(config)
         service.process(path_or_url, output_file)
     except Exception as e:
-        print(f"\n❌ Error: {e}", file=sys.stderr)
+        logging.error(f"Error: {e}")
         sys.exit(1)
 
 

@@ -1,4 +1,7 @@
 import ffmpeg
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class AudioConverter:
@@ -9,7 +12,7 @@ class AudioConverter:
 
     def convert_to_wav(self, input_file: str, output_file: str) -> None:
         """Converts any audio/video format to WAV."""
-        print("🎼 Converting to WAV...")
+        logger.info("Converting to WAV...")
         try:
             (
                 ffmpeg

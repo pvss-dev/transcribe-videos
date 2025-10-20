@@ -1,4 +1,7 @@
+import logging
 import os
+
+logger = logging.getLogger(__name__)
 
 
 class FileManager:
@@ -17,5 +20,5 @@ class FileManager:
         """Saves the transcription to a file."""
         with open(output_file, "w", encoding="utf-8") as f:
             f.write(text)
-        print(f"\n✅ Transcription completed!")
-        print(f"📄 File saved at: {output_file}")
+        logger.info(f"Transcription completed!")
+        logger.info(f"File saved at: {output_file}")

@@ -1,4 +1,7 @@
+import logging
 import yt_dlp
+
+logger = logging.getLogger(__name__)
 
 
 class AudioDownloader:
@@ -26,5 +29,8 @@ class AudioDownloader:
         }
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            print("Downloading audio from YouTube...")
-            ydl.download([url])
+            logger.info("Downloading audio from YouTube...")
+            try:
+                ydl.download([url])
+            except Exception as e:
+                raise RuntimeError(f"Download failed: {e}") from e
