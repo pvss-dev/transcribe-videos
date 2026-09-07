@@ -3,7 +3,7 @@
 Transcreve áudio e vídeo com o [Whisper](https://github.com/openai/whisper), pela
 linha de comando ou por uma interface web onde você arrasta o arquivo.
 
-![tests](https://img.shields.io/badge/tests-53%20passing-brightgreen)
+![tests](https://img.shields.io/badge/tests-55%20passing-brightgreen)
 
 O arquivo enviado é processado no servidor e **apagado assim que a transcrição
 termina** — fica só o texto.
@@ -119,7 +119,7 @@ transcriptor/
     ├── jobs.py       # fila de transcrições em threads
     └── static/       # index.html, style.css, app.js
 
-tests/                # 53 testes, sem rede e sem carregar modelo
+tests/                # 55 testes, sem rede e sem carregar modelo
 ```
 
 ## Limpeza automática
@@ -151,9 +151,10 @@ docker compose up -d
 ```
 
 > **A aplicação não tem autenticação.** Quem alcança a porta enfileira
-> transcrições na sua máquina. O que segura um servidor público é o conjunto de
-> rate limiting no nginx, cota por sessão e limite de concorrência — a config
-> em `deploy/nginx/` já traz tudo isso.
+> transcrições na sua máquina. Num servidor público, o que segura a carga é o
+> conjunto de rate limiting no proxy, cota por sessão e limite de concorrência.
+> O `deploy/nginx/transcriptor.conf` traz um modelo com tudo isso, e o
+> [DEPLOY.md](DEPLOY.md) explica o passo a passo.
 
 ## Testes
 

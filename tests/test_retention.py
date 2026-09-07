@@ -266,9 +266,16 @@ def test_cli_applies_the_limit(tmp_path):
     assert new.exists()
 
 
-def test_cli_keep_partials(tmp_path):
+def test_cli_sweeps_transcripts(tmp_path):
+    """The output folder holds only .txt/.srt, so a sweep must include them."""
     from transcriptor.cleanup_cli import main
 
-    stale = make(tmp_path, "broken.mkv.part", age_days=99)
-    main(["-o", str(tmp_path), "--keep", "50", "--keep-partials", "-q"])
-    assert stale.exists()
+    old_txt = make(tmp_path, "aula.txt", age_days=99)
+    old_srt = make(tmp_path, "aula.srt", age_days=99)
+    fresh = make(tmp_path, "hoje.txt", age_days=1)
+
+    assert main(["-o", str(tmp_path), "--days", "30", "-q"]) == 0
+
+    assert not old_txt.exists()
+    assert not old_srt.exists()
+    assert fresh.exists()

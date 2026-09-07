@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from ..config import TranscriptionConfig
+from ..exceptions import TranscriptionCancelled
 
 # Sentinel pushed onto a job's queue when no further events will arrive.
 _DONE = object()
@@ -74,10 +75,6 @@ class Job:
 
 class QuotaExceeded(Exception):
     """The session has queued more jobs than its allowance."""
-
-
-class _Cancelled(Exception):
-    """Unwinds out of the Whisper progress hook when the user cancels."""
 
 
 class JobManager:
@@ -220,7 +217,7 @@ class JobManager:
 
         def on_progress(progress: "TranscriptionProgress") -> None:
             if job._cancel.is_set():
-                raise _Cancelled()
+                raise TranscriptionCancelled()
             if progress.status == "loading_model":
                 job.status = "loading_model"
             elif progress.status == "transcribing":
@@ -262,7 +259,7 @@ class JobManager:
             else:
                 job.error = outcome.error
 
-        except _Cancelled:
+        except TranscriptionCancelled:
             job.status = "cancelling"
         except Exception as e:
             job.error = f"{type(e).__name__}: {e}"

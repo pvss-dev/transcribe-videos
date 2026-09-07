@@ -1,4 +1,4 @@
-"""Automatic cleanup of downloaded media and transcripts.
+"""Automatic cleanup of generated transcripts.
 
 Nothing here runs unless a limit is set: deleting a user's files by default
 would be the wrong trade in every case. When enabled, a sweep removes the
@@ -38,8 +38,8 @@ class RetentionPolicy:
     max_age_days: Optional[float] = None
     max_files: Optional[int] = None
     max_total_bytes: Optional[int] = None
-    # Interrupted downloads leave .part files behind; these are stale far
-    # sooner than a finished video.
+    # Carried over from a sibling project that downloads media: this service
+    # never produces .part files, so the CLI leaves this unset.
     max_partial_age_hours: Optional[float] = 24.0
     include_transcripts: bool = False
 

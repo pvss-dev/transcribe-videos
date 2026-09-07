@@ -62,7 +62,7 @@ O `.env` fica na VPS e não é sobrescrito pelo deploy — só o
 
 ## 2. No projeto do nginx
 
-Copie `deploy/nginx/transcriptor.conf` para `conf.d/` e ajuste o
+Copie `deploy/nginx/transcriptor.conf` para o `conf.d/` do seu nginx e ajuste o
 `server_name`. O arquivo segue o mesmo padrão do seu `default.conf`: bloco HTTP
 para o desafio ACME mais redirect, e bloco HTTPS com o certificado.
 

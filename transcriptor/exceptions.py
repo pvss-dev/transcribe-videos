@@ -6,6 +6,15 @@ class TranscriptionError(TranscriptorError):
     """Error converting or transcribing audio."""
 
 
+class TranscriptionCancelled(TranscriptorError):
+    """Raised from a progress callback to abort a run in flight.
+
+    Deliberately NOT a TranscriptionError: it is control flow, not a failure,
+    and Transcriber.transcribe must let it through instead of reporting the
+    job as broken.
+    """
+
+
 class WhisperNotInstalled(TranscriptionError):
     """Whisper (and PyTorch) are an optional extra that is not installed."""
 

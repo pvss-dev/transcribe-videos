@@ -18,14 +18,13 @@ Nothing is deleted unless you set at least one limit, and --dry-run shows
 exactly what would go before anything does.
 
 Usage examples:
-  %(prog)s --days 30 --dry-run          # see what a 30-day rule would remove
-  %(prog)s --days 30                    # actually remove it
-  %(prog)s --max-gb 50                  # keep the folder under 50 GB
-  %(prog)s --keep 100                   # keep only the 100 newest files
-  %(prog)s --days 7 --with-transcripts  # remove the .txt/.srt too
+  %(prog)s --days 7 --dry-run        # see what a 7-day rule would remove
+  %(prog)s --days 7                  # actually remove it
+  %(prog)s --keep 200                # keep only the 200 newest transcripts
+  %(prog)s --max-gb 1                # keep the folder under 1 GB
 
-Run it from cron for an unattended VPS:
-  0 4 * * *  /path/to/.venv/bin/yt-download-clean --days 30 -o /srv/videos
+Run it from cron for an unattended server:
+  0 4 * * *  /path/to/.venv/bin/transcriptor-clean --days 7 -o /srv/transcripts
         """,
     )
 
@@ -45,21 +44,6 @@ Run it from cron for an unattended VPS:
     parser.add_argument(
         "--max-gb", type=float, metavar="N",
         help="Keep the folder under N gigabytes, deleting oldest first",
-    )
-    parser.add_argument(
-        "--partial-hours", type=float, default=24.0, metavar="N",
-        help="Also delete interrupted .part downloads older than N hours "
-             "(default: 24; only alongside a real limit)",
-    )
-    parser.add_argument(
-        "--keep-partials",
-        action="store_true",
-        help="Leave interrupted .part downloads alone",
-    )
-    parser.add_argument(
-        "--keep-transcripts",
-        action="store_true",
-        help="Keep .txt/.srt files (they are the whole point here, so cleanup includes them by default)",
     )
     parser.add_argument(
         "-n", "--dry-run",
@@ -82,12 +66,15 @@ def main(argv: Optional[list[str]] = None) -> int:
         max_age_days=args.days,
         max_files=args.keep,
         max_total_bytes=int(args.max_gb * 1e9) if args.max_gb else None,
-        max_partial_age_hours=None if args.keep_partials else args.partial_hours,
-        include_transcripts=not args.keep_transcripts,
+        # This project downloads nothing, so there are never .part files.
+        max_partial_age_hours=None,
+        # The output folder holds nothing but .txt/.srt, so excluding them
+        # would turn every sweep into a silent no-op.
+        include_transcripts=True,
     )
 
     # Refuse rather than sweep. Running the command to see what it does must
-    # never cost the user a file -- not even a stale .part.
+    # never cost the user a transcript.
     if not policy.is_active:
         print(
             "No limits given, so nothing was deleted.\n"

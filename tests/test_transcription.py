@@ -175,3 +175,58 @@ def test_directory_is_not_a_valid_source(tmp_path):
     assert "not a file" in outcome.error
 
 
+
+
+# --------------------------- cancellation ---------------------------
+
+def test_cancelling_is_not_reported_as_a_failure(tmp_path):
+    """A cancel raised from the progress callback is control flow, not an error.
+
+    Transcriber.transcribe wraps everything the model raises into a
+    TranscriptionError; without an explicit carve-out, a cancelled job would
+    surface as "Transcription failed" instead of "cancelled".
+    """
+    from transcriptor.exceptions import TranscriptionCancelled
+
+    class CancellingModel:
+        def transcribe(self, path, **kwargs):
+            raise TranscriptionCancelled()
+
+    wav = tmp_path / "a.wav"
+    wav.write_bytes(b"RIFFfake")
+
+    t = Transcriber()
+    t._model = CancellingModel()
+    t._device = "cpu"
+
+    with pytest.raises(TranscriptionCancelled):
+        t.transcribe(wav)
+
+    # ...while a real failure still becomes a TranscriptionError.
+    class BrokenModel:
+        def transcribe(self, path, **kwargs):
+            raise RuntimeError("out of memory")
+
+    t._model = BrokenModel()
+    with pytest.raises(TranscriptionError, match="out of memory"):
+        t.transcribe(wav)
+
+
+def test_the_service_lets_a_cancel_through(tmp_path, monkeypatch):
+    """process() must not turn a cancel into a failed outcome either."""
+    from transcriptor.exceptions import TranscriptionCancelled
+
+    media = tmp_path / "a.mp4"
+    media.write_bytes(b"fake")
+
+    service = TranscriptionService()
+    monkeypatch.setattr(service.converter, "convert_to_wav",
+                        lambda src, dst: Path(dst).write_bytes(b"RIFF") or Path(dst))
+
+    def cancel(_):
+        raise TranscriptionCancelled()
+
+    monkeypatch.setattr(service.transcriber, "transcribe", cancel)
+
+    with pytest.raises(TranscriptionCancelled):
+        service.process(media)

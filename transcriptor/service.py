@@ -5,7 +5,7 @@ from typing import Optional
 
 from .config import TranscriptionConfig
 from .converter import AudioConverter
-from .exceptions import TranscriptionError
+from .exceptions import TranscriptionCancelled, TranscriptionError
 from .transcriber import TranscribeProgress, Transcriber, TranscriptionResult
 
 logger = logging.getLogger(__name__)
@@ -90,6 +90,9 @@ class TranscriptionService:
                 success=True, result=result, transcript_path=target, srt_path=srt_path,
             )
 
+        except TranscriptionCancelled:
+            # The caller asked to stop; let them decide what that means.
+            raise
         except TranscriptionError as e:
             logger.error(f"Transcription failed: {e}")
             return TranscriptionOutcome(success=False, error=str(e))
