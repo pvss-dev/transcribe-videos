@@ -29,3 +29,8 @@ __pycache__/
 # TRANSCRIPTION FILE
 # ======================
 transcription.txt
+# ======================
+# OUTPUT
+# ======================
+transcripts/
+*.srt

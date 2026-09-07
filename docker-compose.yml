@@ -1,0 +1,61 @@
+# Deployment compose for the VPS. The app port is deliberately NOT published
+# to the host: nginx is the only way in, and it reaches the container over the
+# shared Docker network.
+services:
+  transcriptor:
+    image: ${TRANSCRIPTOR_IMAGE:-ghcr.io/pvss-dev/transcribe-videos:latest}
+    container_name: transcriptor
+    restart: unless-stopped
+
+    environment:
+      TRANSCRIPTOR_OUTPUT: /data/transcripts
+      XDG_CACHE_HOME: /data/cache
+
+      # Open to anyone, so each session gets an hourly allowance and only one
+      # transcription runs at a time -- Whisper on CPU pins a core for minutes.
+      TRANSCRIPTOR_JOBS_PER_HOUR: "${TRANSCRIPTOR_JOBS_PER_HOUR:-10}"
+      TRANSCRIPTOR_MAX_CONCURRENT: "${TRANSCRIPTOR_MAX_CONCURRENT:-1}"
+      TRANSCRIPTOR_MAX_UPLOAD_MB: "${TRANSCRIPTOR_MAX_UPLOAD_MB:-500}"
+
+    volumes:
+      # Transcripts. Survives redeploys.
+      - transcriptor-out:/data/transcripts
+      # Whisper weights (~500 MB for `small`). Without this volume every
+      # container restart re-downloads them.
+      - transcriptor-cache:/data/cache
+
+    command:
+      - python
+      - -m
+      - transcriptor.web
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"
+      # Transcripts are small, but nothing here deletes them otherwise.
+      - --retention-days
+      - "${TRANSCRIPTOR_RETENTION_DAYS:-7}"
+      - --retention-max-gb
+      - "${TRANSCRIPTOR_RETENTION_MAX_GB:-2}"
+
+    # Whisper on CPU is memory hungry; without a ceiling a transcription can
+    # push the whole VPS into swap and take nginx down with it.
+    deploy:
+      resources:
+        limits:
+          memory: ${TRANSCRIPTOR_MEMORY_LIMIT:-4g}
+
+    networks:
+      - proxy-net
+
+volumes:
+  transcriptor-out:
+  transcriptor-cache:
+
+networks:
+  # The network the nginx compose project already created. Compose names a
+  # network "<project>_<network>", so /root/projects/nginx with `local-net`
+  # becomes `nginx_local-net`.
+  proxy-net:
+    external: true
+    name: ${TRANSCRIPTOR_NETWORK:-nginx_local-net}

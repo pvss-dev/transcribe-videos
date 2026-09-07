@@ -1,49 +1,98 @@
 import logging
-import os
-import tempfile
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Optional
 
 from .config import TranscriptionConfig
 from .converter import AudioConverter
-from .downloader import AudioDownloader
-from .file_manager import FileManager
-from .transcriptor import Transcriptor
+from .exceptions import TranscriptionError
+from .transcriber import TranscribeProgress, Transcriber, TranscriptionResult
 
 logger = logging.getLogger(__name__)
 
 
+@dataclass
+class TranscriptionOutcome:
+    """What a full media -> transcript run produced."""
+
+    success: bool
+    result: Optional[TranscriptionResult] = None
+    transcript_path: Optional[Path] = None
+    srt_path: Optional[Path] = None
+    error: Optional[str] = None
+
+
 class TranscriptionService:
-    """Main service that orchestrates the transcription process."""
+    """Turns a local media file into a transcript.
 
-    def __init__(self, config: TranscriptionConfig):
-        self.config = config
-        self.downloader = AudioDownloader(config.audio_quality)
-        self.converter = AudioConverter(config.sample_rate)
-        self.transcriptor = Transcriptor(config.whisper_model, config.language)
-        self.file_manager = FileManager()
+    Deliberately has no downloader: this service only ever reads files that
+    are already on disk. Fetching from YouTube would drag in yt-dlp and, on a
+    datacenter IP, fail the bot check on most videos anyway.
+    """
 
-    def process(self, path_or_url: str, output_file: str = "transcription.txt") -> str:
-        with tempfile.TemporaryDirectory() as temp_dir:
+    def __init__(
+            self,
+            config: Optional[TranscriptionConfig] = None,
+            on_progress: Optional[TranscribeProgress] = None,
+    ):
+        self.config = config or TranscriptionConfig()
+        self.converter = AudioConverter(self.config.sample_rate)
+        self.transcriber = Transcriber(self.config, on_progress=on_progress)
+
+    def process(
+            self,
+            source: str | Path,
+            output_file: Optional[str | Path] = None,
+            write_srt: bool = False,
+            workdir: Optional[str | Path] = None,
+    ) -> TranscriptionOutcome:
+        """Convert, transcribe and save.
+
+        Args:
+            source: Media file to transcribe.
+            output_file: Where to write the transcript. Defaults to the source
+                path with a .txt suffix.
+            write_srt: Also write a .srt beside the transcript.
+            workdir: Where the intermediate WAV goes. Defaults beside the
+                source, which is where an uploaded file already lives.
+        """
+        try:
+            source = Path(source).expanduser()
+            if not source.exists():
+                raise TranscriptionError(f"File not found: {source}")
+            if not source.is_file():
+                raise TranscriptionError(f"Path is not a file: {source}")
+
+            scratch = Path(workdir).expanduser() if workdir else source.parent
+            scratch.mkdir(parents=True, exist_ok=True)
+            wav = scratch / f"{source.stem}.__whisper.wav"
+
             try:
-                audio_file = self._get_audio_file(path_or_url, temp_dir)
-                wav_file = os.path.join(temp_dir, "audio.wav")
+                self.converter.convert_to_wav(source, wav)
+                result = self.transcriber.transcribe(wav)
+            finally:
+                # The WAV is several times the size of the source; never leave
+                # it behind, even when the transcription fails.
+                wav.unlink(missing_ok=True)
 
-                self.converter.convert_to_wav(audio_file, wav_file)
-                text = self.transcriptor.transcribe(wav_file)
-                self.file_manager.save_transcription(text, output_file)
+            target = Path(output_file).expanduser() if output_file else source.with_suffix(".txt")
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(result.text, encoding="utf-8")
+            logger.info(f"Transcript saved at: {target}")
 
-                return text
-            except Exception as e:
-                logger.error(f"Processing failed: {e}")
-                raise
+            srt_path = None
+            if write_srt:
+                srt_path = target.with_suffix(".srt")
+                srt_path.write_text(result.as_srt(), encoding="utf-8")
+                logger.info(f"Subtitles saved at: {srt_path}")
 
-    def _get_audio_file(self, path_or_url: str, temp_dir: str) -> str:
-        """Gets the audio file, downloading if necessary."""
-        if self.downloader.is_url(path_or_url):
-            audio_base_path = os.path.join(temp_dir, "audio")
+            return TranscriptionOutcome(
+                success=True, result=result, transcript_path=target, srt_path=srt_path,
+            )
 
-            self.downloader.download_from_youtube(path_or_url, audio_base_path)
-
-            return audio_base_path + ".mp3"
-
-        self.file_manager.validate_file(path_or_url)
-        return path_or_url
+        except TranscriptionError as e:
+            logger.error(f"Transcription failed: {e}")
+            return TranscriptionOutcome(success=False, error=str(e))
+        except Exception as e:
+            logger.exception("Unexpected error during transcription")
+            return TranscriptionOutcome(success=False, error=f"{type(e).__name__}: {e}")

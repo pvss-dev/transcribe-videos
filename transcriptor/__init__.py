@@ -1,16 +1,19 @@
-from .config import TranscriptionConfig
-from .service import TranscriptionService
-from .transcriptor import Transcriptor
-from .downloader import AudioDownloader
+from .config import WHISPER_MODELS, TranscriptionConfig
 from .converter import AudioConverter
-from .file_manager import FileManager
+from .exceptions import TranscriptionError, WhisperNotInstalled
+from .service import TranscriptionOutcome, TranscriptionService
+from .transcriber import Transcriber, TranscriptionProgress, TranscriptionResult
 
-__version__ = "1.0.0"
+__version__ = "2.0.0"
 __all__ = [
     "TranscriptionConfig",
     "TranscriptionService",
-    "Transcriptor",
-    "AudioDownloader",
+    "TranscriptionOutcome",
+    "Transcriber",
+    "TranscriptionProgress",
+    "TranscriptionResult",
     "AudioConverter",
-    "FileManager",
+    "TranscriptionError",
+    "WhisperNotInstalled",
+    "WHISPER_MODELS",
 ]

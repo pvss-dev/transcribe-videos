@@ -1,0 +1,4 @@
+[console_scripts]
+transcribe = transcriptor.cli:main
+transcriptor-clean = transcriptor.cleanup_cli:main
+transcriptor-web = transcriptor.web.server:run

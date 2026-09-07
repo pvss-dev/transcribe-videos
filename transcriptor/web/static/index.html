@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Transcriptor</title>
+  <link rel="stylesheet" href="/style.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📝</text></svg>">
+</head>
+<body>
+<script>
+  // Runs before first paint: applying the stored theme in app.js (loaded at
+  // the end of body) would flash the dark default first.
+  try {
+    var saved = localStorage.getItem('theme');
+    if (saved === 'light' || saved === 'dark') {
+      document.documentElement.dataset.theme = saved;
+    }
+  } catch (e) { /* storage blocked; keep the default */ }
+</script>
+
+<header class="topbar">
+  <div class="brand">
+    <svg class="brand-icon" viewBox="0 0 24 24" aria-hidden="true">
+      <rect x="9" y="2.5" width="6" height="11" rx="3"/>
+      <path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5v4M8.5 21.5h7"/>
+    </svg>
+    <h1>Transcriptor</h1>
+  </div>
+  <div class="topbar-right">
+    <div class="version" id="version"></div>
+    <button type="button" class="theme-toggle" id="theme-toggle" title="Alternar tema">
+      <svg class="icon-sun" viewBox="0 0 24 24" aria-hidden="true">
+        <circle cx="12" cy="12" r="4.2"/>
+        <path d="M12 2.4v2.6M12 19v2.6M4.2 4.2l1.9 1.9M17.9 17.9l1.9 1.9M2.4 12h2.6M19 12h2.6M4.2 19.8l1.9-1.9M17.9 6.1l1.9-1.9"/>
+      </svg>
+      <svg class="icon-moon" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M20.5 14.6A8.6 8.6 0 0 1 9.4 3.5a8.6 8.6 0 1 0 11.1 11.1z"/>
+      </svg>
+    </button>
+  </div>
+</header>
+
+<main>
+  <section class="panel">
+    <p class="lead">
+      Transcreva áudio ou vídeo com o Whisper. O arquivo é processado no
+      servidor e apagado assim que a transcrição termina — fica só o texto.
+    </p>
+
+    <div class="dropzone" id="dropzone">
+      <input type="file" id="file-input" accept="audio/*,video/*" hidden>
+      <svg class="dropzone-icon" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M12 16V4m0 0L8 8m4-4 4 4"/>
+        <path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/>
+      </svg>
+      <p class="dropzone-text">
+        Arraste um arquivo aqui ou
+        <button type="button" class="linkish" id="browse-btn">escolha do computador</button>
+      </p>
+      <p class="dropzone-sub" id="dropzone-sub">áudio ou vídeo</p>
+    </div>
+
+    <div class="settings">
+      <label class="field">
+        <span class="field-label">Modelo</span>
+        <select id="whisper_model">
+          <option value="tiny">tiny — mais rápido</option>
+          <option value="base">base</option>
+          <option value="small" selected>small — equilíbrio</option>
+          <option value="medium">medium</option>
+          <option value="large">large — melhor qualidade</option>
+          <option value="turbo">turbo — rápido e preciso</option>
+        </select>
+      </label>
+
+      <label class="field">
+        <span class="field-label">Idioma falado</span>
+        <select id="language">
+          <option value="pt" selected>Português</option>
+          <option value="en">Inglês</option>
+          <option value="es">Espanhol</option>
+          <option value="fr">Francês</option>
+          <option value="de">Alemão</option>
+          <option value="it">Italiano</option>
+          <option value="ja">Japonês</option>
+          <option value="">Detectar automaticamente</option>
+        </select>
+      </label>
+    </div>
+
+    <p class="error" id="error" hidden></p>
+  </section>
+
+  <section class="queue">
+    <div class="queue-head">
+      <h2>Transcrições</h2>
+      <button type="button" class="btn btn-ghost" id="clear-btn" hidden>Limpar concluídas</button>
+    </div>
+
+    <div id="jobs"></div>
+
+    <p class="empty" id="empty">
+      Nenhuma transcrição ainda. Envie um arquivo acima para começar.
+    </p>
+  </section>
+</main>
+
+<template id="job-template">
+  <article class="job" data-status="queued">
+    <div class="job-body">
+      <div class="job-head">
+        <p class="job-title"></p>
+        <span class="job-status"></span>
+      </div>
+      <div class="progress"><div class="progress-bar"></div></div>
+      <div class="job-foot">
+        <span class="job-stats"></span>
+        <span class="job-actions">
+          <a class="btn btn-small btn-transcript" hidden>Baixar .txt</a>
+          <a class="btn btn-small btn-srt" hidden>.srt</a>
+          <button type="button" class="btn btn-small btn-cancel">Cancelar</button>
+        </span>
+      </div>
+      <p class="job-transcript" hidden></p>
+      <p class="job-error" hidden></p>
+    </div>
+  </article>
+</template>
+
+<script src="/app.js"></script>
+</body>
+</html>
