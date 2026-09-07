@@ -31,7 +31,10 @@ OUTPUT_DIR = Path(os.getenv("TRANSCRIPTOR_OUTPUT", "./transcripts")).expanduser(
 # Media the browser uploads lands here until its job finishes.
 UPLOAD_ROOT = Path(tempfile.gettempdir()) / "transcriptor-uploads"
 
-MAX_UPLOAD_BYTES = int(os.getenv("TRANSCRIPTOR_MAX_UPLOAD_MB", "2048")) * 1024 * 1024
+# Keep in step with client_max_body_size in the nginx config, which must
+# sit just above this: nginx checks Content-Length and rejects instantly,
+# while a limit only enforced here would let the whole file upload first.
+MAX_UPLOAD_BYTES = int(os.getenv("TRANSCRIPTOR_MAX_UPLOAD_MB", "500")) * 1024 * 1024
 CHUNK = 1024 * 1024
 
 SESSION_COOKIE = "transcriptor_session"
