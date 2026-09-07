@@ -226,23 +226,30 @@ async def job_events(job_id: str, request: Request) -> StreamingResponse:
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
 
+    # Subscribe before the response starts: an event published between the
+    # lookup above and the first read would otherwise be lost.
+    stream = job.subscribe()
+
     async def event_stream():
-        # Send current state immediately so a late subscriber isn't blank.
-        yield f"data: {json.dumps(job.snapshot())}\n\n"
+        try:
+            # Send current state immediately so a late subscriber isn't blank.
+            yield f"data: {json.dumps(job.snapshot())}\n\n"
 
-        while True:
-            try:
-                event = await asyncio.to_thread(job._events.get, True, 15)
-            except queue.Empty:
-                # Comment frame keeps proxies from closing an idle connection.
-                yield ": keepalive\n\n"
-                continue
+            while True:
+                try:
+                    event = await asyncio.to_thread(stream.get, True, 15)
+                except queue.Empty:
+                    # Comment frame keeps proxies from closing an idle connection.
+                    yield ": keepalive\n\n"
+                    continue
 
-            if event is _DONE:
-                yield f"event: done\ndata: {json.dumps(job.snapshot())}\n\n"
-                return
+                if event is _DONE:
+                    yield f"event: done\ndata: {json.dumps(job.snapshot())}\n\n"
+                    return
 
-            yield f"data: {json.dumps(event)}\n\n"
+                yield f"data: {json.dumps(event)}\n\n"
+        finally:
+            job.unsubscribe(stream)
 
     return StreamingResponse(
         event_stream(),

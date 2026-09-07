@@ -17,7 +17,7 @@ setup(
     entry_points={
         "console_scripts": [
             "transcribe=transcriptor.cli:main",
-            "transcriptor-web=transcriptor.web.server:run",
+            "transcriptor-web=transcriptor.web.cli:main",
             "transcriptor-clean=transcriptor.cleanup_cli:main",
         ],
     },

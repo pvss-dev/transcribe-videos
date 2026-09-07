@@ -1,8 +1,9 @@
 """In-memory job queue backing the web UI.
 
 Whisper is fully synchronous, so each transcription runs on its own worker
-thread and publishes events into a per-job queue. The HTTP layer drains those
-queues over SSE.
+thread and publishes events to every client watching that job. Each watcher
+gets its own queue -- a single shared one would split the events between two
+open tabs and hand the end-of-stream sentinel to only one of them.
 """
 
 import queue
@@ -25,6 +26,11 @@ _TERMINAL = {"completed", "error", "cancelled"}
 # How long a job waits for a free slot before giving up. Long enough to ride
 # out a busy spell, short enough that a client is not held forever.
 _QUEUE_TIMEOUT = 1800.0
+
+# The wait for a slot is polled rather than blocking for the whole timeout, so
+# a cancellation while queued is noticed in under a second instead of only when
+# some other job finally frees the slot.
+_SLOT_POLL = 0.5
 
 
 @dataclass
@@ -52,8 +58,59 @@ class Job:
     error: Optional[str] = None
     created_at: float = field(default_factory=time.time)
 
-    _events: queue.Queue = field(default_factory=queue.Queue, repr=False)
+    # Where this job is going to write, filled in before the work starts. A
+    # retention sweep protects it for the whole run; `transcript_path` only
+    # appears once the file is already on disk, moments before the job ends.
+    target_path: Optional[str] = None
+
     _cancel: threading.Event = field(default_factory=threading.Event, repr=False)
+    _streams: list[queue.Queue] = field(default_factory=list, repr=False)
+    _streams_lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
+    _closed: bool = field(default=False, repr=False)
+
+    # ------------------------------------------------------------------
+    # event fan-out
+    # ------------------------------------------------------------------
+
+    def subscribe(self) -> queue.Queue:
+        """Open a private event stream for one watcher, ended by `_DONE`."""
+        stream: queue.Queue = queue.Queue()
+        with self._streams_lock:
+            if self._closed:
+                # The job ended before this watcher connected. Close its stream
+                # at once rather than leaving it on keepalives forever.
+                stream.put(_DONE)
+            else:
+                self._streams.append(stream)
+        return stream
+
+    def unsubscribe(self, stream: queue.Queue) -> None:
+        with self._streams_lock:
+            try:
+                self._streams.remove(stream)
+            except ValueError:
+                pass
+
+    def publish(self, event: Any) -> None:
+        """Hand `event` to every watcher. `_DONE` closes the job for good."""
+        with self._streams_lock:
+            if self._closed:
+                return
+            if event is _DONE:
+                self._closed = True
+            streams = list(self._streams)
+            if self._closed:
+                self._streams.clear()
+        for stream in streams:
+            stream.put(event)
+
+    def written_paths(self) -> list[str]:
+        """Every file this job owns on disk, including ones not written yet."""
+        paths = [self.transcript_path, self.srt_path]
+        if self.target_path:
+            paths.append(self.target_path)
+            paths.append(str(Path(self.target_path).with_suffix(".srt")))
+        return [p for p in paths if p]
 
     def snapshot(self) -> dict[str, Any]:
         """Serializable view of the job for the client."""
@@ -118,12 +175,10 @@ class JobManager:
         return sorted(found, key=lambda j: j.created_at, reverse=True)
 
     def active_paths(self) -> list[str]:
-        """Transcripts of jobs still running, which a sweep must not delete."""
+        """Files of jobs still running, which a sweep must not delete."""
         with self._lock:
-            return [
-                j.transcript_path for j in self._jobs.values()
-                if j.status not in _TERMINAL and j.transcript_path
-            ]
+            running = [j for j in self._jobs.values() if j.status not in _TERMINAL]
+        return [path for job in running for path in job.written_paths()]
 
     # ------------------------------------------------------------------
     # lifecycle
@@ -202,10 +257,10 @@ class JobManager:
     # ------------------------------------------------------------------
 
     def _emit(self, job: Job) -> None:
-        job._events.put(job.snapshot())
+        job.publish(job.snapshot())
 
     def _finish(self, job: Job) -> None:
-        job._events.put(_DONE)
+        job.publish(_DONE)
 
     # ------------------------------------------------------------------
     # worker
@@ -228,21 +283,23 @@ class JobManager:
                 job.seconds_total = progress.seconds_total
             self._emit(job)
 
+        # Known before the queue wait, so a retention sweep protects the file
+        # this job is about to write even while it is still waiting its turn.
+        job.target_path = str(Path(job.output_path) / f"{Path(job.source_name).stem}.txt")
+
         # Everything queues behind the global limit. The job stays visible as
         # "queued" meanwhile, so the page shows it waiting rather than nothing.
-        if not self._slots.acquire(timeout=_QUEUE_TIMEOUT):
-            job.status = "error"
-            job.error = "The server is busy; try again in a few minutes."
-            self._emit(job)
-            self._finish(job)
+        if not self._wait_for_slot(job):
+            if not job._cancel.is_set():
+                job.error = "The server is busy; try again in a few minutes."
+            self._finalize(job)
             return
 
         try:
-            target = str(Path(job.output_path) / f"{Path(job.source_name).stem}.txt")
             service = TranscriptionService(job.config, on_progress=on_progress)
             outcome = service.process(
                 job.local_path,
-                target,
+                job.target_path,
                 write_srt=True,
                 # Keep the intermediate WAV next to the upload, so it is
                 # removed with the rest of the upload directory.
@@ -265,21 +322,46 @@ class JobManager:
             job.error = f"{type(e).__name__}: {e}"
         finally:
             self._slots.release()
-            # Discard the upload before marking the job terminal: a snapshot
-            # taken in between would advertise a file that is about to vanish.
-            self._discard_upload(job)
+            self._finalize(job)
 
-            if job.status == "cancelling":
-                job.status = "cancelled"
-                job.error = "Cancelled by user"
-            elif job.error:
-                job.status = "error"
-            else:
-                job.status = "completed"
-                job.percent = 100.0
+    def _wait_for_slot(self, job: Job) -> bool:
+        """Hold the job until a worker slot frees up.
 
-            self._emit(job)
-            self._finish(job)
+        Polls instead of blocking on one long `acquire`, so cancelling a job
+        that is still queued takes effect immediately rather than whenever the
+        job ahead of it happens to finish.
+        """
+        deadline = time.monotonic() + _QUEUE_TIMEOUT
+        while not job._cancel.is_set():
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return False
+            if self._slots.acquire(timeout=min(_SLOT_POLL, remaining)):
+                return True
+        return False
+
+    def _finalize(self, job: Job) -> None:
+        """Settle a job's terminal state and close its event stream."""
+        # Discard the upload before marking the job terminal: a snapshot taken
+        # in between would advertise a file that is about to vanish.
+        self._discard_upload(job)
+
+        if job.transcript_path:
+            # The transcript exists. A cancellation that lands in this same
+            # instant does not undo work already on disk.
+            job.status = "completed"
+            job.percent = 100.0
+        elif job.status == "cancelling" or job._cancel.is_set():
+            job.status = "cancelled"
+            job.error = "Cancelled by user"
+        elif job.error:
+            job.status = "error"
+        else:
+            job.status = "completed"
+            job.percent = 100.0
+
+        self._emit(job)
+        self._finish(job)
 
     @staticmethod
     def _discard_upload(job: Job) -> None:

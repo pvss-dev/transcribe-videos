@@ -75,16 +75,19 @@ function showError(message) {
   errorEl.hidden = false;
 }
 
-async function explainFailure(response, fallback) {
+function failureMessage(status, body) {
   // The app answers with JSON; nginx's own rate-limit page is HTML, so
   // parsing has to be allowed to fail.
-  const detail = await response.json().then((d) => d.detail).catch(() => null);
+  let detail = null;
+  try {
+    detail = JSON.parse(body).detail;
+  } catch (e) { /* nginx errors are HTML, not JSON */ }
   if (detail) return detail;
-  if (response.status === 429) {
+  if (status === 429) {
     return 'Muitas requisições em pouco tempo. Espere um minuto e tente de novo.';
   }
-  if (response.status === 413) return 'Arquivo grande demais.';
-  return fallback;
+  if (status === 413) return 'Arquivo grande demais.';
+  return 'Falha ao enviar o arquivo.';
 }
 
 /* ---------- job cards ---------- */
@@ -229,15 +232,7 @@ function uploadFile(file) {
   request.addEventListener('load', () => {
     dropPlaceholder(placeholderId);
     if (request.status >= 400) {
-      let detail = null;
-      try {
-        detail = JSON.parse(request.responseText).detail;
-      } catch (e) { /* nginx errors are HTML, not JSON */ }
-      showError(detail || (request.status === 429
-        ? 'Muitas requisições em pouco tempo. Espere um minuto e tente de novo.'
-        : request.status === 413
-        ? 'Arquivo grande demais.'
-        : 'Falha ao enviar o arquivo.'));
+      showError(failureMessage(request.status, request.responseText));
       return;
     }
     const job = JSON.parse(request.responseText);

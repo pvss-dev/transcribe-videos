@@ -27,6 +27,9 @@ source .venv/bin/activate        # Linux/macOS
 pip install torch --index-url https://download.pytorch.org/whl/cpu
 
 pip install -r requirements-transcribe.txt
+
+# Instala o pacote e os comandos `transcribe` e `transcriptor-clean`
+pip install -e .
 ```
 
 > Se aparecer `error: externally-managed-environment`, o `pip` está rodando no

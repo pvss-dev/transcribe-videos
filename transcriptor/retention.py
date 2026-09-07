@@ -118,7 +118,6 @@ def _select_for_deletion(
     """Decide which files violate the policy. `files` is newest first."""
     doomed: list[Path] = []
     running_total = 0
-    survivors = 0
 
     for index, path in enumerate(files):
         if path in protected:
@@ -127,7 +126,6 @@ def _select_for_deletion(
                 running_total += path.stat().st_size
             except OSError:
                 pass
-            survivors += 1
             continue
 
         try:
@@ -159,7 +157,6 @@ def _select_for_deletion(
             doomed.append(path)
         else:
             running_total += stat.st_size
-            survivors += 1
 
     return doomed
 

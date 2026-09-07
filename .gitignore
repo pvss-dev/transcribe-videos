@@ -13,6 +13,14 @@ __pycache__/
 *$py.class
 
 # ======================
+# BUILD / PACKAGING ARTIFACTS
+# ======================
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+
+# ======================
 # IDE / EDITOR SETTINGS
 # ======================
 .vscode/

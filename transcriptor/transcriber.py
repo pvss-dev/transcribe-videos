@@ -215,7 +215,10 @@ class Transcriber:
 
         segments = raw.get("segments") or []
         # One line per segment reads far better than Whisper's single blob.
-        text = "\n".join(s["text"].strip() for s in segments if s.get("text", "").strip())
+        # `or ""` rather than a get() default: a segment carrying an explicit
+        # None would sail past the default and blow up on .strip().
+        lines = ((s.get("text") or "").strip() for s in segments)
+        text = "\n".join(line for line in lines if line)
 
         self._emit(TranscriptionProgress("finished", percent=100.0))
         logger.info("Transcription completed!")

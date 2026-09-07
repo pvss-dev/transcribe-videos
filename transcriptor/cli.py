@@ -124,8 +124,8 @@ def main(argv: Optional[list[str]] = None) -> int:
             return 1
 
         print(f"Transcript: {outcome.transcript_path}")
-        if args.srt:
-            print(f"Subtitles:  {outcome.transcript_path.with_suffix('.srt')}")
+        if outcome.srt_path:
+            print(f"Subtitles:  {outcome.srt_path}")
         if outcome.result and outcome.result.language:
             print(f"Language:   {outcome.result.language}")
         return 0
